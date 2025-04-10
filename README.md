@@ -1,7 +1,3 @@
-# Configuring-Autoscaling
-Here’s the updated README file, personalized with your experience using "I":
-
----
 
 # Kubernetes Web Application Deployment with Autoscaling, Load Balancing, and Health Probes
 
@@ -27,6 +23,7 @@ I started by setting up an AWS EKS cluster and verified the setup using the foll
 ```bash
 kubectl get nodes
 ```
+![Screenshot (202)](https://github.com/user-attachments/assets/8e5c2f2e-e605-4267-a292-59dff39c731d)
 
 ### Step 2: Deploy the Web Application
 1. **Create a deployment.yaml file**:
@@ -71,6 +68,8 @@ spec:
 kubectl apply -f deployment.yaml
 kubectl get pods
 ```
+![Screenshot (203)](https://github.com/user-attachments/assets/b61d661b-6572-4875-87a8-d9a6364864f4)
+![Screenshot (204)](https://github.com/user-attachments/assets/22a57e24-8838-43ec-8c35-fa064b3830b5)
 
 ### Step 3: Configure Horizontal Pod Autoscaler (HPA)
 1. **Create an hpa.yaml file**:
@@ -102,6 +101,8 @@ spec:
 kubectl apply -f hpa.yaml
 kubectl get hpa
 ```
+![Screenshot (205)](https://github.com/user-attachments/assets/b39bb6bf-2424-4f7d-9bba-818031d5d854)
+![Screenshot (206)](https://github.com/user-attachments/assets/04cab64e-4181-4e39-82ce-5c5bab42f390)
 
 ### Step 4: Configure Load Balancing
 1. **Create a service.yaml file**:
@@ -127,6 +128,8 @@ spec:
 kubectl apply -f service.yaml
 kubectl get svc
 ```
+![Screenshot (208)](https://github.com/user-attachments/assets/f31a0dd6-293a-43c8-b50f-a29df1477e12)
+![Screenshot (209)](https://github.com/user-attachments/assets/fa7b1033-f02f-4d89-857c-0d4d4dcc2163)
 
 ### Step 5: Test the Setup
 To test the setup and simulate traffic, I used Apache Benchmark:
@@ -147,72 +150,66 @@ ab -n 1000 -c 100 http://192.168.49.2:31887/
 ```
 
 ---
+![Screenshot (210)](https://github.com/user-attachments/assets/18cd59c3-807d-42a9-a161-c75075c02274)
+![Screenshot (211)](https://github.com/user-attachments/assets/f03c1da8-afa7-423f-85f8-07752066f79e)
+![Screenshot (212)](https://github.com/user-attachments/assets/afe352b1-69bd-48ae-b477-12e9071fc129)
 
-## Challenges Faced and Solutions
 
-### Challenge 1: **Port-Forwarding Issue**
-When testing the service, I encountered an issue where it was only accessible locally within the EC2 instance. To make the service accessible externally, I explored two solutions:
+## ✅ Challenges Faced and Final Solutions
 
-1. **SSH Tunnel**:
-   I used this command to forward the port from my local machine to the EC2 instance:
+### **Challenge 1: External Access to the Web App**
 
+**Problem**:  
+The application was accessible only from within the EC2 instance when using `kubectl port-forward`. Direct access via public IP did not work, even with `--address 0.0.0.0`.
+
+**Solution**:
+I used **SSH tunneling** in combination with `kubectl port-forward` for seamless local access:
+
+1. **SSH Port Forwarding from Local Machine**:
    ```bash
    ssh -i funmi.pem -L 8080:localhost:8080 ubuntu@52.91.104.233
    ```
 
-   This allowed me to access the service via `http://localhost:8080` from my local machine.
-
-2. **Bind to 0.0.0.0**:
-   I ran the following command to bind the port to all interfaces, allowing access via the EC2 public IP:
-
+2. **Inside the EC2 Instance**, forward the Kubernetes service:
    ```bash
-   kubectl port-forward --address 0.0.0.0 service/web-app-service 8080:80
+   kubectl port-forward service/web-app-service 8080:80
    ```
 
-   This made the service available at `http://52.91.104.233:8080`.
+3. **Access the app from local machine**:
+   ```bash
+   curl http://localhost:8080
+   ```
+   ![Screenshot (213)](https://github.com/user-attachments/assets/ad9d0ad2-1c37-4075-9561-65d4cd2f4c05)
+   ![Screenshot (214)](https://github.com/user-attachments/assets/1330e191-bdc0-4590-87b0-c454302b1d31)
+
+
+This approach securely exposed the service to my local environment using `localhost`, solving the issue without needing to alter cluster networking or public firewall rules.
 
 ---
 
-### Challenge 2: **Pod Restarts Due to Liveness Probe Failures**
-I noticed that the pods were restarting frequently due to liveness probe failures. After troubleshooting, I found that the pod was not being given enough time to start before the liveness probe checked its health. To fix this, I:
+### **Challenge 2: Frequent Pod Restarts from Liveness Probe Failures**
 
-1. Adjusted the `initialDelaySeconds` and `periodSeconds` in the liveness probe configuration to better match the pod startup time.
-2. This helped to prevent unnecessary restarts, ensuring a smoother pod lifecycle.
+**Problem**:  
+Pods restarted repeatedly due to failing the liveness probe, likely because the NGINX container hadn't fully started by the time the probe was triggered.
 
----
+**Solution**:
+I tuned the **liveness probe settings** by increasing `initialDelaySeconds` and `periodSeconds`:
 
-## Testing and Verification
-
-1. **Load Testing with Apache Benchmark**:
-   I simulated traffic using Apache Benchmark and monitored the scaling behavior:
-
-```bash
-ab -n 1000 -c 100 http://52.91.104.233:8080/
+```yaml
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 15  # Increased from default
+  periodSeconds: 20        # Gave more room between checks
 ```
 
-2. **Monitoring**:
-   I observed the scaling of pods with the following commands:
-
-```bash
-kubectl get hpa
-kubectl get pods
-```
+This allowed the pods enough time to start and stabilize before being probed, eliminating unnecessary restarts and improving overall pod lifecycle management.
 
 ---
 
-## Conclusion
-By following the steps outlined in this guide, I successfully deployed a high-traffic web application on Kubernetes, configured autoscaling, load balancing, and health probes to ensure high availability and optimal performance. Through troubleshooting port-forwarding issues and adjusting the liveness probe configuration, I overcame key challenges and gained valuable hands-on experience with Kubernetes.
+## ✅ Conclusion
 
---- 
-![Screenshot (184)](https://github.com/user-attachments/assets/56eb1acd-d1b5-43e6-a118-2eec9267fe72)
-![Screenshot (185)](https://github.com/user-attachments/assets/62b1f10f-8d09-4df6-a062-325a28e564eb)
-![Screenshot (189)](https://github.com/user-attachments/assets/43ec0c43-530e-4816-a91a-4c790289fc09)
-![Screenshot (188)](https://github.com/user-attachments/assets/689ee302-08a4-4cb7-a769-e7b4afd2ae96)
-![Screenshot (189)](https://github.com/user-attachments/assets/a8d61cb5-e5e9-45b6-8cb4-bb7573d2781d)
-![Screenshot (190)](https://github.com/user-attachments/assets/d019b1b4-221a-4b6f-a55e-2b7979feb7ef)
-![Screenshot (191)](https://github.com/user-attachments/assets/0c8c14d8-e790-49f9-8710-8cae60c1217b)
-![Screenshot (192)](https://github.com/user-attachments/assets/d4e51dc0-de12-49d4-b559-159356c1dcd0)
-![Screenshot (193)](https://github.com/user-attachments/assets/ff5a7a68-4dcb-464a-9d57-e0cb1ea3b1c9)
-![Screenshot (197)](https://github.com/user-attachments/assets/7bfb9adc-1cdd-49f4-b368-bebf75dac58f)
-![Screenshot (198)](https://github.com/user-attachments/assets/3daa9d59-c59e-4536-975e-52ca6eced013)
+This project solidified my understanding of deploying scalable and resilient applications on Kubernetes. By configuring **autoscaling, load balancing**, and **health checks**, and overcoming real-world challenges like **port-forwarding and probe tuning**, I gained valuable hands-on experience with production-grade Kubernetes workflows on AWS EKS.
 
+---
